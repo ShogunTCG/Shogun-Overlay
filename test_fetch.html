@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head><title>Test</title></head>
+<body style="background:#050816;color:white;font-family:Inter,sans-serif;padding:40px;">
+<h2>Shopify Fetch Test</h2>
+<div id="result">Laden...</div>
+<script>
+  fetch('https://shogun-overlay.netlify.app/.netlify/functions/products')
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById('result').innerHTML = 
+        '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+    })
+    .catch(e => {
+      document.getElementById('result').innerHTML = 'ERROR: ' + e.toString();
+    });
+</script>
+</body>
+</html>
