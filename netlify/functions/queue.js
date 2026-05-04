@@ -1,4 +1,7 @@
-const { getDeployStore } = require('@netlify/blobs');
+const { getStore } = require('@netlify/blobs');
+
+const SITE_ID = '0633c672-41db-4731-abeb-473d854a7653';
+const TOKEN = 'nfp_AeTB2aQTVG9ZcwvtE9iZaxX2MUuuEjuF106b';
 
 exports.handler = async function(event, context) {
   const headers = {
@@ -7,7 +10,7 @@ exports.handler = async function(event, context) {
   };
 
   try {
-    const store = getDeployStore('queue');
+    const store = getStore({ name: 'queue', siteID: SITE_ID, token: TOKEN });
     const method = event.httpMethod;
 
     if (method === 'GET') {
