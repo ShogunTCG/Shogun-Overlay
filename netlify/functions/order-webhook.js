@@ -12,8 +12,9 @@ exports.handler = async function(event, context) {
     const store = getStore({ name: 'queue', siteID: SITE_ID, token: TOKEN });
     const order = JSON.parse(event.body);
 
+    // Always use unique ID - combine order ID with timestamp
     const queueItem = {
-      id: (order.id || Date.now()).toString(),
+      id: (order.id || Date.now()).toString() + '-' + Date.now(),
       name: order.billing_address?.first_name || order.email?.split('@')[0] || 'Klant',
       product: order.line_items?.[0]?.name || 'Bestelling',
       total: order.total_price || '0.00',
