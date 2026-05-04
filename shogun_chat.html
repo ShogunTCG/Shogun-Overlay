@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shogun TCG Chat</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: transparent;
+    font-family: 'Inter', sans-serif;
+    overflow: hidden;
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 12px;
+  }
+
+  #chat-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 100vh;
+    overflow: hidden;
+  }
+
+  .chat-message {
+    background: rgba(5, 8, 22, 0.88);
+    border-radius: 8px;
+    padding: 8px 12px;
+    border-left: 2px solid #e11d48;
+    animation: slideIn 0.3s ease-out forwards;
+    word-break: break-word;
+    line-height: 1.4;
+  }
+
+  .chat-message.highlighted {
+    border-left-color: #0ea5e9;
+    background: rgba(14, 165, 233, 0.08);
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .chat-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+  }
+
+  .chat-badges img {
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+    margin-right: 2px;
+  }
+
+  .chat-username {
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+  }
+
+  .chat-text {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .chat-text img {
+    width: 20px;
+    height: 20px;
+    vertical-align: middle;
+  }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="chat-container"></div>
+
+<script>
+  const CHANNEL = 'shoguntcg';
+  const MAX_MESSAGES = 20;
+  let messages = [];
+
+  // Color palette for usernames
+  const COLORS = [
+    '#e11d48', '#0ea5e9', '#f59e0b', '#10b981', '#8b5cf6',
+    '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
+  ];
+
+  function getUserColor(username) {
+    let hash = 0;
+    for (let i = 0; i < username.length; i++) {
+      hash = username.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return COLORS[Math.abs(hash) % COLORS.length];
+  }
+
+  function parseEmotes(text, emotes) {
+    if (!emotes) return escapeHtml(text);
+    
+    let parts = [];
+    let emotePositions = [];
+    
+    for (const [emoteId, positions] of Object.entries(emotes)) {
+      for (const pos of positions) {
+        const [start, end] = pos.split('-').map(Number);
+        emotePositions.push({ start, end, emoteId });
+      }
+    }
+    
+    emotePositions.sort((a, b) => a.start - b.start);
+    
+    let result = '';
+    let lastIndex = 0;
+    
+    for (const ep of emotePositions) {
+      result += escapeHtml(text.slice(lastIndex, ep.start));
+      result += `<img src="https://static-cdn.jtvnw.net/emoticons/v2/${ep.emoteId}/default/dark/1.0" alt="${escapeHtml(text.slice(ep.start, ep.end + 1))}" />`;
+      lastIndex = ep.end + 1;
+    }
+    
+    result += escapeHtml(text.slice(lastIndex));
+    return result;
+  }
+
+  function escapeHtml(text) {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function addMessage(username, color, text, badges, emotes, isHighlighted) {
+    const container = document.getElementById('chat-container');
+    
+    const msgEl = document.createElement('div');
+    msgEl.className = 'chat-message' + (isHighlighted ? ' highlighted' : '');
+    
+    // Badges HTML
+    let badgesHtml = '';
+    if (badges) {
+      for (const [badge, version] of Object.entries(badges)) {
+        if (badge === 'broadcaster') {
+          badgesHtml += `<img src="https://static-cdn.jtvnw.net/badges/v1/5527c58c-fb7d-422d-b71b-f309dcb85cc1/1" alt="broadcaster" class="badge" />`;
+        } else if (badge === 'moderator') {
+          badgesHtml += `<img src="https://static-cdn.jtvnw.net/badges/v1/3267646d-33f0-4b17-b3df-f923a41db1d0/1" alt="moderator" class="badge" />`;
+        } else if (badge === 'subscriber') {
+          badgesHtml += `<img src="https://static-cdn.jtvnw.net/badges/v1/5d9f2208-5dd8-11e7-8513-2ff4adfae661/1" alt="subscriber" class="badge" />`;
+        }
+      }
+    }
+
+    const userColor = color || getUserColor(username);
+    const parsedText = parseEmotes(text, emotes);
+    
+    msgEl.innerHTML = `
+      <div class="chat-header">
+        <span class="chat-badges">${badgesHtml}</span>
+        <span class="chat-username" style="color: ${userColor}">${escapeHtml(username)}</span>
+      </div>
+      <div class="chat-text">${parsedText}</div>
+    `;
+    
+    container.appendChild(msgEl);
+    messages.push(msgEl);
+    
+    // Remove old messages
+    if (messages.length > MAX_MESSAGES) {
+      const old = messages.shift();
+      old.remove();
+    }
+  }
+
+  // Connect to Twitch IRC via WebSocket
+  function connect() {
+    const ws = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
+    
+    ws.onopen = () => {
+      ws.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
+      ws.send('PASS oauth:justinfan12345');
+      ws.send('NICK justinfan12345');
+      ws.send(`JOIN #${CHANNEL}`);
+    };
+    
+    ws.onmessage = (event) => {
+      const lines = event.data.split('\r\n');
+      
+      for (const line of lines) {
+        if (line.startsWith('PING')) {
+          ws.send('PONG :tmi.twitch.tv');
+          continue;
+        }
+        
+        if (!line.includes('PRIVMSG')) continue;
+        
+        // Parse tags
+        const tags = {};
+        if (line.startsWith('@')) {
+          const tagStr = line.split(' ')[0].slice(1);
+          for (const tag of tagStr.split(';')) {
+            const [k, v] = tag.split('=');
+            tags[k] = v;
+          }
+        }
+        
+        // Parse message
+        const msgMatch = line.match(/PRIVMSG #\w+ :(.+)$/);
+        if (!msgMatch) continue;
+        
+        const text = msgMatch[1];
+        const username = tags['display-name'] || tags['username'] || 'unknown';
+        const color = tags['color'] || null;
+        const isHighlighted = tags['msg-id'] === 'highlighted-message';
+        
+        // Parse badges
+        let badges = {};
+        if (tags['badges']) {
+          for (const badge of tags['badges'].split(',')) {
+            const [name, version] = badge.split('/');
+            badges[name] = version;
+          }
+        }
+        
+        // Parse emotes
+        let emotes = {};
+        if (tags['emotes']) {
+          for (const emote of tags['emotes'].split('/')) {
+            const [id, positions] = emote.split(':');
+            emotes[id] = positions.split(',');
+          }
+        }
+        
+        addMessage(username, color, text, badges, emotes, isHighlighted);
+      }
+    };
+    
+    ws.onclose = () => {
+      setTimeout(connect, 3000);
+    };
+    
+    ws.onerror = () => {
+      ws.close();
+    };
+  }
+
+  connect();
+</script>
+</body>
+</html>
