@@ -21,6 +21,7 @@ exports.handler = async function(event, context) {
 
     const queueItem = {
       id: (order.id || Date.now()).toString() + '-' + Date.now(),
+      orderNumber: order.order_number || order.name || null,
       name: order.billing_address?.first_name || order.email?.split('@')[0] || 'Klant',
       product: items[0]?.name || 'Bestelling',
       total: order.total_price || '0.00',
