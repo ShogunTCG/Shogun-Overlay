@@ -12,38 +12,18 @@ exports.handler = async function(event, context) {
     const store = getStore({ name: 'queue', siteID: SITE_ID, token: TOKEN });
     const order = JSON.parse(event.body);
 
-    // Fetch all products to find images by product ID
-    let productImages = {};
-    try {
-      const res = await fetch('https://shoguntcg.myshopify.com/products.json?limit=250');
-      const data = await res.json();
-      for (const p of (data.products || [])) {
-        productImages[p.id] = p.images?.[0]?.src || null;
-        // Also index by variant ID
-        for (const v of (p.variants || [])) {
-          productImages['v_' + v.id] = p.images?.[0]?.src || null;
-        }
-      }
-    } catch(e) {}
-
-    // Build items with images matched by product/variant ID
-    const items = (order.line_items || []).map(item => {
-      const img = productImages['v_' + item.variant_id] || 
-                  productImages[item.product_id] || null;
-      return {
-        name: item.name || item.title || 'Product',
-        qty: item.quantity || 1,
-        price: '€' + parseFloat(item.price || 0).toFixed(2).replace('.', ','),
-        img: img
-      };
-    });
+    const items = (order.line_items || []).map(item => ({
+      name: item.name || item.title || 'Product',
+      qty: item.quantity || 1,
+      price: '€' + parseFloat(item.price || 0).toFixed(2).replace('.', ','),
+      img: null
+    }));
 
     const queueItem = {
       id: (order.id || Date.now()).toString() + '-' + Date.now(),
       name: order.billing_address?.first_name || order.email?.split('@')[0] || 'Klant',
       product: items[0]?.name || 'Bestelling',
       total: order.total_price || '0.00',
-      image: items[0]?.img || null,
       items: items,
       status: 'waiting',
       timestamp: new Date().toISOString()
