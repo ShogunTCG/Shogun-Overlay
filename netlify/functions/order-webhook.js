@@ -12,12 +12,21 @@ exports.handler = async function(event, context) {
     const store = getStore({ name: 'queue', siteID: SITE_ID, token: TOKEN });
     const order = JSON.parse(event.body);
 
-    // Always use unique ID - combine order ID with timestamp
+    // Get all line items with images
+    const items = (order.line_items || []).map(item => ({
+      name: item.name || item.title || 'Product',
+      qty: item.quantity || 1,
+      price: '€' + parseFloat(item.price || 0).toFixed(2).replace('.', ','),
+      img: null // Shopify webhook doesn't include images, fetch separately if needed
+    }));
+
     const queueItem = {
       id: (order.id || Date.now()).toString() + '-' + Date.now(),
       name: order.billing_address?.first_name || order.email?.split('@')[0] || 'Klant',
-      product: order.line_items?.[0]?.name || 'Bestelling',
+      product: items[0]?.name || 'Bestelling',
       total: order.total_price || '0.00',
+      image: order.line_items?.[0]?.image?.src || null,
+      items: items,
       status: 'waiting',
       timestamp: new Date().toISOString()
     };
