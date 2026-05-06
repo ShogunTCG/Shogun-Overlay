@@ -12,14 +12,16 @@
   .queue-list { display: flex; flex-direction: column; gap: 12px; }
   .queue-item { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; }
   .queue-item.live { border-color: rgba(225,29,72,0.5); background: rgba(225,29,72,0.06); }
-  .queue-item.waiting { border-color: rgba(255,255,255,0.08); }
-  .item-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .item-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
   .item-name { font-size: 15px; font-weight: 800; }
   .item-badge { font-size: 9px; font-weight: 900; letter-spacing: 2px; padding: 3px 8px; border-radius: 4px; }
   .badge-live { background: #e11d48; color: white; }
   .badge-waiting { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); }
-  .item-product { font-size: 12px; color: rgba(255,255,255,0.4); margin-bottom: 12px; }
-  .item-price { font-size: 13px; font-weight: 700; color: #0ea5e9; margin-bottom: 12px; }
+  .item-order-num { font-size: 11px; color: rgba(255,255,255,0.3); letter-spacing: 2px; margin-bottom: 8px; }
+  .item-products { margin-bottom: 10px; display: flex; flex-direction: column; gap: 4px; }
+  .item-product-line { font-size: 13px; color: rgba(255,255,255,0.6); }
+  .item-product-line span { color: white; font-weight: 700; }
+  .item-total { font-size: 14px; font-weight: 700; color: #0ea5e9; margin-bottom: 12px; }
   .btn-row { display: flex; gap: 8px; }
   .btn { flex: 1; padding: 10px; border: none; border-radius: 8px; font-size: 12px; font-weight: 800; letter-spacing: 1px; cursor: pointer; text-transform: uppercase; }
   .btn-live { background: #e11d48; color: white; }
@@ -78,24 +80,43 @@
       return;
     }
 
-    list.innerHTML = queue.map((item, i) => `
-      <div class="queue-item ${item.status}">
-        <div class="item-header">
-          <div class="item-name">${item.name}</div>
-          <div class="item-badge badge-${item.status}">${item.status === 'live' ? '● LIVE' : '#' + (i+1)}</div>
-        </div>
-        <div class="item-product">${item.product}</div>
-        <div class="item-price">€${parseFloat(item.total).toFixed(2)}</div>
-        <div class="btn-row">
-          ${item.status === 'waiting' ? `<button class="btn btn-live" onclick="updateStatus('${item.id}', 'live')">▶ Live zetten</button>` : ''}
-          ${item.status === 'live' ? `<button class="btn btn-done" onclick="updateStatus('${item.id}', 'done')">✓ Afgerond</button>` : ''}
-          <button class="btn btn-remove" onclick="updateStatus('${item.id}', 'done')">✕</button>
-        </div>
-      </div>
-    `).join('');
+    list.innerHTML = queue.map((item, i) => {
+      const isLive = item.status === 'live';
+
+      // Order number
+      const orderNumHtml = item.orderNumber 
+        ? '<div class="item-order-num">BESTELLING #' + item.orderNumber + '</div>'
+        : '';
+
+      // Products list
+      let productsHtml = '';
+      if (item.items && item.items.length > 0) {
+        productsHtml = '<div class="item-products">' +
+          item.items.map(p => 
+            '<div class="item-product-line"><span>' + p.qty + 'x</span> ' + p.name + ' — ' + p.price + '</div>'
+          ).join('') +
+        '</div>';
+      } else {
+        productsHtml = '<div class="item-products"><div class="item-product-line">' + item.product + '</div></div>';
+      }
+
+      return '<div class="queue-item ' + item.status + '">' +
+        '<div class="item-header">' +
+          '<div class="item-name">' + item.name + '</div>' +
+          '<div class="item-badge badge-' + item.status + '">' + (isLive ? '● LIVE' : '#' + (i+1)) + '</div>' +
+        '</div>' +
+        orderNumHtml +
+        productsHtml +
+        '<div class="item-total">Totaal: €' + parseFloat(item.total).toFixed(2) + '</div>' +
+        '<div class="btn-row">' +
+          (item.status === 'waiting' ? '<button class="btn btn-live" onclick="updateStatus(\'' + item.id + '\', \'live\')">▶ Live zetten</button>' : '') +
+          (item.status === 'live' ? '<button class="btn btn-done" onclick="updateStatus(\'' + item.id + '\', \'done\')">✓ Afgerond</button>' : '') +
+          '<button class="btn btn-remove" onclick="updateStatus(\'' + item.id + '\', \'done\')">✕</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
   }
 
-  // Load on start and every 10 seconds
   loadQueue();
   setInterval(loadQueue, 10000);
 </script>
