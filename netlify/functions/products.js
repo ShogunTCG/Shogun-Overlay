@@ -1,10 +1,30 @@
+const CACHE_TTL = 900; // 15 minuten
+
+let cache = null;
+let cacheTime = 0;
+
 exports.handler = async function(event, context) {
+  const now = Date.now();
+
+  // Geef cache terug als die nog geldig is
+  if (cache && (now - cacheTime) < CACHE_TTL * 1000) {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=900'
+      },
+      body: cache
+    };
+  }
+
   const url = 'https://shoguntcg.myshopify.com/collections/livestream-overlay/products.json';
-  
+
   try {
     const response = await fetch(url);
     const data = await response.json();
-    
+
     const products = data.products.map(p => ({
       title: p.title,
       price: p.variants[0].price,
@@ -12,14 +32,18 @@ exports.handler = async function(event, context) {
       available: p.variants[0].available,
       tags: p.tags
     }));
-    
+
+    cache = JSON.stringify({ products });
+    cacheTime = now;
+
     return {
       statusCode: 200,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=900'
       },
-      body: JSON.stringify({ products })
+      body: cache
     };
   } catch(e) {
     return {
