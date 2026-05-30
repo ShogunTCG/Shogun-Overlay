@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: transparent; }
+
+  .sw { width: 100%; aspect-ratio: 9/16; overflow: hidden; position: relative; }
+  .inner {
+    width: 1080px; height: 1920px;
+    transform-origin: top left;
+    position: absolute; top: 0; left: 0;
+    font-family: 'Inter', sans-serif;
+    overflow: hidden;
+    background: transparent;
+  }
+
+  #bg-canvas {
+    position: absolute; inset: 0;
+    width: 1080px; height: 1920px;
+    z-index: 0;
+  }
+
+  .grid-bg {
+    position: absolute; inset: 0; pointer-events: none; z-index: 1;
+    background-image:
+      linear-gradient(rgba(14,165,233,0.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(14,165,233,0.018) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+
+  /*
+    LAYOUT — alles zit in één frame van 16px padding:
+    ─────────────────────────────────────────────────
+    Outer padding: 16px alle kanten
+    Binnen die padding:
+
+    TOP BALK:   x=16, y=16,   w=1048, h=140   → y einde = 156
+    GAP:        8px                            → y = 164
+    BOVENBLOK:  x=16, y=164,  h=405
+      Facecam:  x=16, y=164,  w=720, h=405    (16:9: 720/16*9=405 ✓)
+      Carrousel: x=736, y=164, w=328, h=405
+    GAP:        8px                            → y = 577
+    PACK OPEN:  x=16, y=577,  w=1048, tot y=1904 (16px van onder)
+
+    Alles zit in #050816 achtergrond, transparante gaten via canvas.
+    Geen enkele rode lijn — alleen de achtergrondkleur verbindt alles.
+  */
+
+
+  /* CARROUSEL PANEEL — rechts naast facecam */
+  .right-panel {
+    position: absolute;
+    top: 164px; left: 736px;
+    width: 328px; height: 405px;
+    background: rgba(5,8,22,0.97);
+    border-radius: 0 16px 16px 0;
+    display: flex;
+    flex-direction: column;
+    z-index: 10;
+    overflow: hidden;
+  }
+
+  /* kleine afrondingen links van het rechter paneel
+     zodat de overgang naar de facecam vloeiend is */
+  .right-panel-inner {
+    display: flex; flex-direction: column;
+    flex: 1; min-height: 0;
+  }
+
+  .panel-header {
+    flex-shrink: 0;
+    padding: 16px 16px 10px 16px;
+  }
+  .section-label {
+    font-size: 9px; font-weight: 900;
+    color: rgba(255,255,255,0.2);
+    letter-spacing: 5px; text-transform: uppercase;
+  }
+
+  .panel-carousel {
+    flex: 1;
+    position: relative;
+    min-height: 0;
+  }
+
+  .carousel-slide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 10px 12px;
+    transform: translateX(100%);
+    opacity: 0;
+    transition: transform 0.5s cubic-bezier(0.4,0,0.2,1), opacity 0.5s;
+  }
+  .carousel-slide.active { transform: translateX(0); opacity: 1; }
+
+  .carousel-slide img {
+    width: 72%; aspect-ratio: 1;
+    object-fit: contain; border-radius: 8px;
+    margin-bottom: 10px;
+    mix-blend-mode: screen; flex-shrink: 0;
+  }
+
+  .c-name {
+    font-size: 10px; font-weight: 800;
+    color: #fff; text-transform: uppercase;
+    text-align: center; letter-spacing: 0.5px;
+    line-height: 1.3; margin-bottom: 6px;
+  }
+
+  .c-row { display: flex; align-items: center; gap: 7px; }
+  .c-price { font-size: 18px; font-weight: 900; color: #fff; }
+
+  .c-badge {
+    font-size: 7px; font-weight: 900;
+    letter-spacing: 1px; padding: 3px 6px;
+    border-radius: 3px; text-transform: uppercase;
+  }
+  .badge-hot  { background: #f97316; color: white; }
+  .badge-new  { background: #0ea5e9; color: white; }
+  .badge-sale { background: #e11d48; color: white; }
+
+  .panel-progress {
+    flex-shrink: 0;
+    padding: 8px 14px 14px 14px;
+  }
+  .progress-bar {
+    height: 2px; background: rgba(255,255,255,0.05);
+    border-radius: 2px; overflow: hidden; margin-bottom: 7px;
+  }
+  .progress-fill { height: 100%; background: #e11d48; width: 100%; transition: none; }
+
+  .dots { display: flex; gap: 5px; justify-content: center; }
+  .dot {
+    width: 16px; height: 3px; border-radius: 2px;
+    background: rgba(255,255,255,0.12); transition: background 0.3s;
+  }
+  .dot.active { background: #e11d48; }
+
+  @keyframes livepulse { 0%,100%{opacity:1}50%{opacity:0.25} }
+
+  /* Giveaway widget */
+  .giveaway-widget {
+    position: absolute;
+    bottom: 14px; left: 14px;
+    background: rgba(5,8,22,0.92);
+    border: 1px solid rgba(249,115,22,0.45);
+    border-radius: 9px;
+    padding: 9px 13px;
+    z-index: 20;
+    display: none; max-width: 260px;
+  }
+  .giveaway-widget.active { display: block; }
+  .gw-label   { font-size: 7.5px; font-weight: 900; color: #f97316; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 3px; }
+  .gw-title   { font-size: 12px; font-weight: 800; color: #fff; margin-bottom: 3px; line-height: 1.3; }
+  .gw-entries { font-size: 10px; color: rgba(255,255,255,0.4); }
+  .gw-entries span { color: #f97316; font-weight: 900; }
+
+</style>
+</head>
+<body>
+<div class="sw">
+  <div class="inner" id="inner">
+
+    <canvas id="bg-canvas" width="1080" height="1920"></canvas>
+    <div class="grid-bg"></div>
+    <!-- FACECAM live badge + giveaway overlay -->
+    <div style="position:absolute;top:164px;left:16px;width:720px;height:405px;z-index:15;pointer-events:none;">
+      <div style="
+        position:absolute;top:14px;left:14px;
+        background:#e11d48;color:white;
+        font-size:11px;font-weight:900;
+        letter-spacing:3px;padding:5px 12px;
+        border-radius:6px;font-family:'Inter',sans-serif;
+        animation:livepulse 2s ease-in-out infinite;
+      ">● LIVE</div>
+    </div>
+
+    <!-- GIVEAWAY widget -->
+    <div class="giveaway-widget" id="gw-widget">
+      <div class="gw-label">🎁 Giveaway</div>
+      <div class="gw-title" id="gw-title-el">Chaos Rising Box</div>
+      <div class="gw-entries">Deelnemers: <span id="gw-count-el">0</span></div>
+    </div>
+
+    <!-- RECHTER PANEEL: carrousel -->
+    <div class="right-panel">
+      <div class="right-panel-inner">
+        <div class="panel-header">
+          <div class="section-label">Nu beschikbaar</div>
+        </div>
+        <div class="panel-carousel" id="carousel-wrap"></div>
+        <div class="panel-progress">
+          <div class="progress-bar"><div class="progress-fill" id="prog-fill"></div></div>
+          <div class="dots" id="dots-el"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  /* ── CANVAS ── */
+  const canvas = document.getElementById('bg-canvas');
+  const ctx = canvas.getContext('2d');
+
+  function rrect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+    ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+    ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+    ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
+    ctx.closePath();
+  }
+
+  function drawBg() {
+    const W=1080, H=1920;
+    ctx.clearRect(0,0,W,H);
+
+    /* Shogun donkere achtergrond */
+    ctx.fillStyle='#050816';
+    ctx.fillRect(0,0,W,H);
+
+    /* Rode glow links */
+    const gr=ctx.createRadialGradient(0,200,0,0,200,800);
+    gr.addColorStop(0,'rgba(225,29,72,0.12)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=gr; ctx.fillRect(0,0,W,H);
+
+    /* Blauwe glow rechtsonder */
+    const gb=ctx.createRadialGradient(W,H*0.7,0,W,H*0.7,700);
+    gb.addColorStop(0,'rgba(14,165,233,0.09)'); gb.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=gb; ctx.fillRect(0,0,W,H);
+
+    ctx.globalCompositeOperation='destination-out';
+    ctx.fillStyle='rgba(0,0,0,1)';
+
+    /*
+      FACECAM gat: r=12
+      top-balk eindigt y=156, gap=8 → facecam start y=164
+      x=16, w=720, h=405
+    */
+    rrect(16, 164, 720, 405, 12);
+    ctx.fill();
+
+    /*
+      PACK OPENING gat: r=12
+      bovenblok eindigt y=569 (164+405), gap=24 → pack start y=593
+      x=16, w=1048, h tot 16px van onder = 1904-593=1311
+    */
+    rrect(16, 593, 1048, 1311, 12);
+    ctx.fill();
+
+    ctx.globalCompositeOperation='source-over';
+  }
+
+  drawBg();
+
+  /* ── SCHALEN ── */
+  const sw=document.querySelector('.sw');
+  const inner=document.getElementById('inner');
+  function resize(){
+    const s=sw.offsetWidth/1080;
+    inner.style.transform='scale('+s+')';
+    sw.style.height=(1920*s)+'px';
+  }
+  resize(); window.addEventListener('resize',resize);
+
+  /* ── CARROUSEL ── */
+  const DUR=7000;
+  let slides=[],dotEls=[],cur=0,t0=null,raf=null;
+
+  function goTo(n){
+    if(!slides.length)return;
+    const prev=cur;
+    slides[prev].style.transition='transform 0.4s ease-in,opacity 0.25s';
+    slides[prev].style.transform='translateX(-100%)';
+    slides[prev].style.opacity='0';
+    if(dotEls[prev])dotEls[prev].classList.remove('active');
+    setTimeout(()=>{
+      slides[prev].classList.remove('active');
+      slides[prev].style.transition='none';
+      slides[prev].style.transform='translateX(100%)';
+      cur=n;
+      slides[cur].style.transition='none';
+      slides[cur].style.transform='translateX(100%)';
+      slides[cur].style.opacity='0';
+      slides[cur].classList.add('active');
+      if(dotEls[cur])dotEls[cur].classList.add('active');
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        slides[cur].style.transition='transform 0.45s ease-out,opacity 0.45s';
+        slides[cur].style.transform='translateX(0)';
+        slides[cur].style.opacity='1';
+        t0=performance.now(); resetProg();
+      }));
+    },420);
+  }
+
+  function resetProg(){
+    const f=document.getElementById('prog-fill');
+    if(!f)return;
+    f.style.transition='none'; f.style.width='100%';
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      f.style.transition='width '+DUR+'ms linear';
+      f.style.width='0%';
+    }));
+  }
+
+  function tick(ts){
+    if(slides.length&&t0!==null&&ts-t0>=DUR)goTo((cur+1)%slides.length);
+    raf=requestAnimationFrame(tick);
+  }
+
+  async function loadProducts(){
+    const wrap=document.getElementById('carousel-wrap');
+    const dotsEl=document.getElementById('dots-el');
+    if(!wrap||!dotsEl)return;
+    try{
+      const res=await fetch('https://shogun-overlay.netlify.app/.netlify/functions/products');
+      const data=await res.json();
+      const prods=data.products||[];
+      if(!prods.length)return;
+
+      wrap.innerHTML=''; dotsEl.innerHTML='';
+      slides=[]; dotEls=[];
+
+      prods.forEach((p,i)=>{
+        const price=parseFloat(p.price).toLocaleString('nl-NL',{style:'currency',currency:'EUR'});
+        const tags=Array.isArray(p.tags)?p.tags:[];
+        const badge=tags.includes('HOT')?'<span class="c-badge badge-hot">HOT</span>':
+                    tags.includes('Nieuw')?'<span class="c-badge badge-new">NIEUW</span>':
+                    tags.includes('Sale')?'<span class="c-badge badge-sale">SALE</span>':'';
+
+        const s=document.createElement('div');
+        s.className='carousel-slide'+(i===0?' active':'');
+        s.style.transform=i===0?'translateX(0)':'translateX(100%)';
+        s.style.opacity=i===0?'1':'0';
+        s.innerHTML=`<img src="${p.image}" alt="${p.title}"/>
+          <div class="c-name">${p.title}</div>
+          <div class="c-row"><div class="c-price">${price}</div>${badge}</div>`;
+        wrap.appendChild(s); slides.push(s);
+
+        const d=document.createElement('div');
+        d.className='dot'+(i===0?' active':'');
+        dotsEl.appendChild(d); dotEls.push(d);
+      });
+
+      cur=0; t0=performance.now(); resetProg();
+      if(!raf)raf=requestAnimationFrame(tick);
+    }catch(e){console.error(e);}
+  }
+
+  /* ── GIVEAWAY ── */
+  (function(){
+    const p=new URLSearchParams(window.location.search);
+    if(p.get('giveaway')==='1'){
+      const w=document.getElementById('gw-widget');
+      if(w)w.classList.add('active');
+      const t=document.getElementById('gw-title-el');
+      const c=document.getElementById('gw-count-el');
+      if(t&&p.get('title'))t.textContent=decodeURIComponent(p.get('title'));
+      if(c&&p.get('count'))c.textContent=p.get('count');
+    }
+  })();
+
+  loadProducts();
+  setInterval(loadProducts,60000);
+</script>
+</body>
+</html>
